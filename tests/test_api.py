@@ -242,6 +242,81 @@ index be6a56b..1fc03a9 100644
         assert set(match.groups()) == {""}
 
 
+@pytest.mark.parametrize(
+    "skip_file0,skip_file1,skip_file2,skip_dir0",
+    [
+        (True, False, False, False),
+        (True, True, False, False),
+        (True, True, True, False),
+        (True, True, True, True),
+        (False, True, False, False),
+        (False, True, True, False),
+        (False, True, True, True),
+        (False, False, True, False),
+        (False, False, True, True),
+        (False, False, False, True),
+        (False, False, False, False),
+    ],
+)
+def test_diff_has_diff_with_skips(
+    skip_file0, skip_file1, skip_file2, skip_dir0, capfd, mocker, tmpdir
+):
+    expected_return_value = True
+    mocker.patch.object(sys.stdout, "isatty", return_value=True)
+
+    project_dir = cruft.create(
+        "https://github.com/cruft/cookiecutter-test", Path(tmpdir), directory="dir", checkout="diff"
+    )
+    (project_dir / "file0").write_text("new content 0\n")
+    (project_dir / "dir0/file1").write_text("new content 1\n")
+    (project_dir / "dir0/file2").unlink()
+
+    skip = []
+    if skip_file0:
+        skip.append(str(project_dir/"file0"))
+    if skip_file1:
+        skip.append(str(project_dir/"dir0/file1"))
+    if skip_file2:
+        skip.append(str(project_dir/"dir0/file2"))
+    if skip_dir0:
+        skip.append(str(project_dir/"dir0"))
+
+    expected_output = """"""
+    if not skip_dir0 and not skip_file1:
+        expected_output += """diff --git upstream-template-old{tmpdir}/dir0/file1 upstream-template-new{tmpdir}/dir0/file1
+index eaae237..ac3e272 100644
+--- upstream-template-old{tmpdir}/dir0/file1
++++ upstream-template-new{tmpdir}/dir0/file1
+@@ -1 +1 @@
+-new content 1
++content1
+"""
+    if not skip_file1:
+        expected_output += """diff --git upstream-template-old{tmpdir}/file0 upstream-template-new{tmpdir}/file0
+index be6a56b..1fc03a9 100644
+--- upstream-template-old{tmpdir}/file0
++++ upstream-template-new{tmpdir}/file0
+@@ -1 +1 @@
+-new content 0
++content0
+"""
+
+    assert cruft.diff(project_dir, exit_code=False, skip=skip) == expected_return_value
+
+    captured = capfd.readouterr()
+    stdout = captured.out
+    stderr = captured.err
+
+    assert stderr == ""
+
+    expected_output_regex = re.escape(expected_output)
+    expected_output_regex = expected_output_regex.replace(r"\{tmpdir\}", r"([^\n]*)")
+    expected_output_regex = rf"^{expected_output_regex}$"
+
+    match = re.search(expected_output_regex, stdout, re.MULTILINE)
+    assert match is not None
+
+
 @pytest.mark.parametrize("exit_code", [(False,), (True,)])
 def test_diff_no_diff(exit_code, capfd, mocker, tmpdir):
     project_dir = cruft.create(
