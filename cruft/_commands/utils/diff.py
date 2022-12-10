@@ -1,7 +1,7 @@
 from pathlib import Path
 from re import sub
 from subprocess import PIPE, run  # nosec
-from typing import List
+from typing import List, Optional
 
 from cruft import exceptions
 
@@ -25,14 +25,19 @@ def _git_diff(*args: str) -> List[str]:
     ]
 
 
-def get_diff(repo0: Path, repo1: Path) -> str:
+def get_diff(repo0: Path, repo1: Path, skip: Optional[List[str]] = None) -> str:
     """Compute the raw diff between two repositories."""
     # Use Path methods in order to straighten out the differences between the the OSs.
     repo0_str = repo0.resolve().as_posix()
     repo1_str = repo1.resolve().as_posix()
+    if skip:
+        skip_args = [f":^{s}" for s in skip]
+    else:
+        skip_args = []
+
     try:
         diff = run(
-            _git_diff("--no-ext-diff", "--no-color", repo0_str, repo1_str),
+            _git_diff("--no-ext-diff", "--no-color", repo0_str, repo1_str, *skip_args),
             cwd=repo0_str,
             stdout=PIPE,
             stderr=PIPE,
@@ -68,6 +73,10 @@ def get_diff(repo0: Path, repo1: Path) -> str:
     return diff
 
 
-def display_diff(repo0: Path, repo1: Path):
+def display_diff(repo0: Path, repo1: Path, skip: Optional[List[str]]):
     """Displays the diff between two repositories."""
-    run(_git_diff(repo0.as_posix(), repo1.as_posix()))
+    if skip:
+        skip_args = [f":^{s}" for s in skip]
+    else:
+        skip_args = []
+    run(_git_diff(repo0.as_posix(), repo1.as_posix()), *skip_args)

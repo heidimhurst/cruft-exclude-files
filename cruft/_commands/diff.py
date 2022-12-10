@@ -2,7 +2,7 @@ import json
 import shutil
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 import typer
 
@@ -11,7 +11,10 @@ from .utils.iohelper import AltTemporaryDirectory
 
 
 def diff(
-    project_dir: Path = Path("."), exit_code: bool = False, checkout: Optional[str] = None
+    project_dir: Path = Path("."),
+    exit_code: bool = False,
+    checkout: Optional[str] = None,
+    skip: Optional[List[str]] = None,
 ) -> bool:
     """Show the diff between the project and the linked Cookiecutter template"""
     cruft_file = utils.cruft.get_cruft_file(project_dir)
@@ -57,7 +60,7 @@ def diff(
                 destination.chmod(local_path.stat().st_mode)
 
         # Finally we can compute and print the diff.
-        diff = utils.diff.get_diff(local_template_dir, remote_template_dir)
+        diff = utils.diff.get_diff(local_template_dir, remote_template_dir, skip)
 
         if diff.strip():
             has_diff = True
@@ -78,6 +81,6 @@ def diff(
                 # to git diff so that they can benefit from coloration and paging.
                 # Ouputing absolute paths is less of a concern although it would be
                 # better to find a way to make git shrink those paths.
-                utils.diff.display_diff(local_template_dir, remote_template_dir)
+                utils.diff.display_diff(local_template_dir, remote_template_dir, skip)
 
     return not (has_diff and exit_code)

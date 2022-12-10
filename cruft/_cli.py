@@ -233,6 +233,9 @@ def update(
             " repository (but no other changes)"
         ),
     ),
+    skip: Optional[List[str]] = typer.Option(
+        None, "--skip", show_default=False, help="Default files/pattern to skip on update"
+    ),
 ) -> None:
     if not _commands.update(
         project_dir=project_dir,
@@ -242,6 +245,7 @@ def update(
         checkout=checkout,
         strict=strict,
         allow_untracked_files=allow_untracked_files,
+        skip=skip
     ):
         raise typer.Exit(1)
 
@@ -263,6 +267,9 @@ def diff(
         "-c",
         help=("The git reference to check against. Supports branches, tags and commit hashes."),
     ),
+    skip: Optional[List[str]] = typer.Option(
+        None, "--skip", show_default=False, help="Default files/pattern to skip on update"
+    ),
 ) -> None:
-    if not _commands.diff(project_dir=project_dir, exit_code=exit_code, checkout=checkout):
+    if not _commands.diff(project_dir=project_dir, exit_code=exit_code, checkout=checkout, skip=skip):
         raise typer.Exit(1)

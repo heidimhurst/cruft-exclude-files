@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 from subprocess import DEVNULL, PIPE, CalledProcessError, run  # nosec
-from typing import Optional, Set
+from typing import List, Optional, Set
 
 import click
 import typer
@@ -21,6 +21,7 @@ def update(
     checkout: Optional[str] = None,
     strict: bool = True,
     allow_untracked_files: bool = False,
+    skip: Optional[List[str]] = None,
 ) -> bool:
     """Update specified project's cruft to the latest and greatest release."""
     cruft_file = utils.cruft.get_cruft_file(project_dir)
@@ -90,6 +91,7 @@ def update(
             skip_update,
             skip_apply_ask,
             allow_untracked_files,
+            skip,
         ):
             # Update the cruft state and dump the new state
             # to the cruft file
@@ -139,12 +141,14 @@ def _is_project_repo_clean(directory: Path, allow_untracked_files: bool):
     return True
 
 
-def _apply_patch_with_rejections(diff: str, expanded_dir_path: Path):
+def _apply_patch_with_rejections(diff: str, expanded_dir_path: Path, skip: Optional[List[str]]):
     offset = _get_offset(expanded_dir_path)
 
     git_apply = ["git", "apply", "--reject"]
     if offset:
         git_apply.extend(["--directory", offset])
+    if skip:
+        _ = [git_apply.extend(["--exclude", s]) for s in skip]
 
     try:
         run(
@@ -166,12 +170,19 @@ def _apply_patch_with_rejections(diff: str, expanded_dir_path: Path):
         )
 
 
-def _apply_three_way_patch(diff: str, expanded_dir_path: Path, allow_untracked_files: bool):
+def _apply_three_way_patch(
+    diff: str,
+    expanded_dir_path: Path,
+    allow_untracked_files: bool,
+    skip: Optional[List[str]] = None,
+):
     offset = _get_offset(expanded_dir_path)
 
     git_apply = ["git", "apply", "-3"]
     if offset:
         git_apply.extend(["--directory", offset])
+    if skip:
+        _ = [git_apply.extend(["--exclude", s]) for s in skip]
 
     try:
         run(
@@ -189,7 +200,7 @@ def _apply_three_way_patch(diff: str, expanded_dir_path: Path, allow_untracked_f
                 "Failed to apply the update. Retrying again with a different update strategy.",
                 fg=typer.colors.YELLOW,
             )
-            _apply_patch_with_rejections(diff, expanded_dir_path)
+            _apply_patch_with_rejections(diff, expanded_dir_path, skip)
 
 
 def _get_offset(expanded_dir_path: Path):
@@ -213,7 +224,12 @@ def _get_offset(expanded_dir_path: Path):
             raise error
 
 
-def _apply_patch(diff: str, expanded_dir_path: Path, allow_untracked_files: bool):
+def _apply_patch(
+    diff: str,
+    expanded_dir_path: Path,
+    allow_untracked_files: bool,
+    skip: Optional[List[str]],
+):
     # Git 3 way merge is the our best bet
     # at applying patches. But it only works
     # with git repos. If the repo is not a git dir
@@ -221,9 +237,9 @@ def _apply_patch(diff: str, expanded_dir_path: Path, allow_untracked_files: bool
     # diffs cleanly where applicable otherwise creates
     # *.rej files where there are conflicts
     if _is_git_repo(expanded_dir_path):
-        _apply_three_way_patch(diff, expanded_dir_path, allow_untracked_files)
+        _apply_three_way_patch(diff, expanded_dir_path, allow_untracked_files, skip)
     else:
-        _apply_patch_with_rejections(diff, expanded_dir_path)
+        _apply_patch_with_rejections(diff, expanded_dir_path, skip)
 
 
 def _apply_project_updates(
@@ -233,8 +249,10 @@ def _apply_project_updates(
     skip_update: bool,
     skip_apply_ask: bool,
     allow_untracked_files: bool,
+    skip: Optional[List[str]],
 ) -> bool:
-    diff = utils.diff.get_diff(old_main_directory, new_main_directory)
+    # TODO: do we need a skip arg here?
+    diff = utils.diff.get_diff(old_main_directory, new_main_directory, skip)
 
     if not skip_apply_ask and not skip_update:
         input_str: str = "v"
@@ -252,7 +270,7 @@ def _apply_project_updates(
             )
             if input_str == "v":
                 if diff.strip():
-                    utils.diff.display_diff(old_main_directory, new_main_directory)
+                    utils.diff.display_diff(old_main_directory, new_main_directory, skip)
                 else:
                     click.secho("There are no changes.", fg=typer.colors.YELLOW)
         if input_str == "n":
@@ -262,5 +280,5 @@ def _apply_project_updates(
             skip_update = True
 
     if not skip_update and diff.strip():
-        _apply_patch(diff, project_dir, allow_untracked_files)
+        _apply_patch(diff, project_dir, allow_untracked_files, skip)
     return True
